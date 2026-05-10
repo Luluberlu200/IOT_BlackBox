@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tour de Contrôle — BlackBox IoT</title>
+  <script src="/static/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #070c15;
+      --panel: #0d1421;
+      --border: #1a2e4a;
+      --text: #c8d6e5;
+      --dim: #4a6080;
+      --green: #00e676;
+      --red: #ff1744;
+      --orange: #ff9100;
+      --blue: #00b0ff;
+      --yellow: #ffd740;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 28px;
+      background: var(--panel);
+      border-bottom: 2px solid var(--border);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      border: 2px solid var(--blue);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--blue);
+      font-size: 1rem;
+      box-shadow: 0 0 12px rgba(0,176,255,0.4);
+    }
+
+    .title {
+      font-size: 1.25rem;
+      font-weight: bold;
+      letter-spacing: 3px;
+      color: var(--blue);
+      text-shadow: 0 0 20px rgba(0,176,255,0.5);
+    }
+
+    .subtitle {
+      font-size: 0.65rem;
+      color: var(--dim);
+      letter-spacing: 2px;
+      margin-top: 2px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      font-size: 0.75rem;
+    }
+
+    .conn-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: blink 2s ease-in-out infinite;
+    }
+    .dot.offline { background: var(--red); box-shadow: 0 0 8px var(--red); animation: none; }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .timestamp { color: var(--dim); }
+
+    /* ── Cards ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 16px;
+      padding: 24px 28px 8px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 16px;
+      text-align: center;
+      transition: border-color 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--blue);
+      opacity: 0.5;
+    }
+
+    .card.alarm-active {
+      border-color: var(--red);
+      background: rgba(255,23,68,0.06);
+    }
+    .card.alarm-active::before { background: var(--red); opacity: 1; }
+
+    .card-label {
+      font-size: 0.62rem;
+      letter-spacing: 2px;
+      color: var(--dim);
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .card-value {
+      font-size: 2.6rem;
+      font-weight: bold;
+      color: var(--blue);
+      line-height: 1;
+      transition: color 0.3s;
+    }
+
+    .card-unit {
+      font-size: 0.68rem;
+      color: var(--dim);
+      margin-top: 6px;
+    }
+
+    .bar-wrap {
+      margin-top: 14px;
+      height: 5px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .bar {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.5s ease, background 0.3s;
+    }
+
+    /* Badge état air */
+    .badge {
+      display: inline-block;
+      padding: 7px 14px;
+      border-radius: 5px;
+      font-size: 0.78rem;
+      font-weight: bold;
+      letter-spacing: 1px;
+      margin-top: 10px;
+    }
+    .badge-ok   { background: rgba(0,230,118,0.1);  color: var(--green);  border: 1px solid var(--green); }
+    .badge-warn { background: rgba(255,145,0,0.1);  color: var(--orange); border: 1px solid var(--orange); }
+    .badge-err  { background: rgba(255,23,68,0.15); color: var(--red);    border: 1px solid var(--red);
+                  animation: flash 0.6s ease-in-out infinite; }
+
+    @keyframes flash { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+    /* Alarme */
+    .alarm-off { color: var(--green); font-size: 1.5rem; margin-top: 10px; }
+    .alarm-on  { color: var(--red);   font-size: 1.5rem; margin-top: 10px; animation: flash 0.5s infinite; }
+
+    /* Vitesse */
+    .speed-tag {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 7px 12px;
+      border-radius: 5px;
+      background: rgba(0,176,255,0.08);
+      border: 1px solid var(--blue);
+      color: var(--blue);
+      font-size: 0.82rem;
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+
+    /* ── Charts ── */
+    .charts {
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+      gap: 16px;
+      padding: 16px 28px 24px;
+      flex: 1;
+    }
+
+    .chart-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+    }
+
+    .chart-title {
+      font-size: 0.62rem;
+      letter-spacing: 2px;
+      color: var(--dim);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 10px;
+      font-size: 0.62rem;
+      color: var(--dim);
+      border-top: 1px solid var(--border);
+      letter-spacing: 1px;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Panneau commandes ── */
+    .control-panel {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      padding: 14px 28px;
+      background: rgba(255,23,68,0.03);
+      border-top: 1px solid rgba(255,23,68,0.18);
+      border-bottom: 1px solid rgba(255,23,68,0.18);
+    }
+
+    .control-label {
+      font-size: 0.58rem;
+      letter-spacing: 2px;
+      color: var(--dim);
+      white-space: nowrap;
+    }
+
+    .btn-interdit {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 26px;
+      background: transparent;
+      border: 1.5px solid var(--red);
+      border-radius: 6px;
+      color: var(--red);
+      font-family: 'Courier New', monospace;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: box-shadow 0.2s, border-color 0.2s, color 0.2s;
+    }
+
+    .btn-interdit::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--red);
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+
+    .btn-interdit:hover:not(:disabled)::before { opacity: 0.07; }
+    .btn-interdit:active:not(:disabled)::before { opacity: 0.14; }
+
+    .btn-interdit:disabled { cursor: not-allowed; opacity: 0.7; }
+
+    .btn-interdit.confirming {
+      border-color: var(--yellow);
+      color: var(--yellow);
+      animation: pulse-border 0.7s ease-in-out infinite;
+    }
+    .btn-interdit.confirming::before { background: var(--yellow); }
+
+    .btn-interdit.sent {
+      border-color: var(--green);
+      color: var(--green);
+    }
+    .btn-interdit.sent::before { background: var(--green); }
+
+    .btn-interdit.error-state {
+      border-color: var(--orange);
+      color: var(--orange);
+    }
+
+    @keyframes pulse-border {
+      0%,100% { box-shadow: 0 0 0 0 rgba(255,215,64,0.5); }
+      50%      { box-shadow: 0 0 0 8px rgba(255,215,64,0); }
+    }
+
+    .btn-icon { font-size: 1.6rem; line-height: 1; }
+
+    .btn-text { text-align: left; }
+
+    .btn-main {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+
+    .btn-sub {
+      display: block;
+      font-size: 0.58rem;
+      letter-spacing: 1.5px;
+      opacity: 0.7;
+      margin-top: 2px;
+    }
+
+    .cmd-feedback {
+      font-size: 0.7rem;
+      letter-spacing: 1px;
+      color: var(--dim);
+      min-width: 260px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⬡</div>
+    <div>
+      <div class="title">TOUR DE CONTRÔLE</div>
+      <div class="subtitle">BLACKBOX IOT · ISEN · Topic: isen/blackbox</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="conn-indicator">
+      <div class="dot" id="connDot"></div>
+      <span id="connStatus">CONNEXION…</span>
+    </div>
+    <div class="timestamp">MAJ : <span id="lastUpdate">—</span></div>
+  </div>
+</header>
+
+<!-- ── Cards ── -->
+<div class="cards">
+
+  <!-- Niveau Gaz -->
+  <div class="card" id="cardGaz">
+    <div class="card-label">Niveau de Gaz</div>
+    <div class="card-value" id="gazVal">—</div>
+    <div class="card-unit">/ 1023 &nbsp;·&nbsp; seuil : 150</div>
+    <div class="bar-wrap">
+      <div class="bar" id="gazBar" style="width:0%;background:var(--blue)"></div>
+    </div>
+  </div>
+
+  <!-- État air -->
+  <div class="card">
+    <div class="card-label">État de l'Air</div>
+    <span class="badge badge-ok" id="etatBadge">—</span>
+  </div>
+
+  <!-- Alarme -->
+  <div class="card" id="cardAlarm">
+    <div class="card-label">Alarme Gaz</div>
+    <div id="alarmIcon" class="alarm-off">—</div>
+    <div class="card-unit" id="alarmTxt"></div>
+  </div>
+
+  <!-- Accélérateur -->
+  <div class="card">
+    <div class="card-label">Accélérateur</div>
+    <div class="card-value" id="accelVal">—</div>
+    <div class="card-unit">%</div>
+    <div class="bar-wrap">
+      <div class="bar" id="accelBar" style="width:0%;background:var(--orange)"></div>
+    </div>
+  </div>
+
+  <!-- Régime moteur -->
+  <div class="card">
+    <div class="card-label">Régime Moteur</div>
+    <span class="speed-tag" id="vitesseTag">—</span>
+  </div>
+
+  <!-- Distance capteur -->
+  <div class="card" id="cardDist">
+    <div class="card-label">Distance · Avant</div>
+    <div class="card-value" id="distVal">—</div>
+    <div class="card-unit">cm</div>
+    <div class="bar-wrap">
+      <div class="bar" id="distBar" style="width:0%"></div>
+    </div>
+    <span class="badge badge-ok" id="distBadge" style="margin-top:8px;font-size:0.65rem">—</span>
+  </div>
+
+  <!-- Capteur Axes (accéléromètre) -->
+  <div class="card" id="cardAxes">
+    <div class="card-label">Capteur Axes</div>
+    <div class="card-value" id="zAccelVal" style="font-size:2rem">—</div>
+    <div class="card-unit">g &nbsp;·&nbsp; axe Z</div>
+    <span class="badge badge-ok" id="chuteBadge" style="margin-top:12px">—</span>
+  </div>
+
+</div>
+
+<!-- ── Panneau de Contrôle ── -->
+<div class="control-panel">
+  <div class="control-label">CONTRÔLE TOUR<br>COMMANDES MANUELLES</div>
+  <button class="btn-interdit" id="btnAtterrissage" onclick="handleAtterrissage()">
+    <span class="btn-icon">⊗</span>
+    <span class="btn-text">
+      <span class="btn-main" id="btnMain">ATTERRISSAGE INTERDIT</span>
+      <span class="btn-sub" id="btnSub">ZONE CONTAMINÉE &nbsp;·&nbsp; ALERTE CRITIQUE</span>
+    </span>
+  </button>
+  <div class="cmd-feedback" id="cmdFeedback"></div>
+</div>
+
+<!-- ── Charts ── -->
+<div class="charts">
+
+  <div class="chart-panel">
+    <div class="chart-title">Niveau de Gaz — Historique (dernière heure)</div>
+    <canvas id="gazChart"></canvas>
+  </div>
+
+  <div class="chart-panel">
+    <div class="chart-title">Accélérateur % — Historique</div>
+    <canvas id="accelChart"></canvas>
+  </div>
+
+
+</div>
+
+<footer>
+  Capteur : gas_sensor_v1_5 &nbsp;·&nbsp; Broker : broker.hivemq.com:1883 &nbsp;·&nbsp; Actualisation : 2 s
+</footer>
+
+<script>
+  const VITESSE = {
+    moteur_arrete:  'MOTEUR ARRÊTÉ',
+    ralenti:        'RALENTI',
+    vitesse_normale:'VITESSE NORMALE',
+    acceleration:   'ACCÉLÉRATION',
+    pleine_puissance:'PLEINE PUISSANCE'
+  };
+
+  function fmtTime(ts) {
+    return new Date(ts * 1000).toLocaleTimeString('fr-FR');
+  }
+
+  /* ── Chart.js ── */
+  const gridColor = 'rgba(26,46,74,0.7)';
+  const tickColor = '#4a6080';
+
+  function makeAxis(extra = {}) {
+    return {
+      ticks: { color: tickColor, font: { size: 9 }, maxTicksLimit: 8 },
+      grid: { color: gridColor },
+      ...extra
+    };
+  }
+
+  const gazChart = new Chart(document.getElementById('gazChart'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Gaz',
+          data: [],
+          borderColor: '#00b0ff',
+          backgroundColor: 'rgba(0,176,255,0.06)',
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: true,
+          tension: 0.35
+        },
+        {
+          label: 'Seuil alarme',
+          data: [],
+          borderColor: 'rgba(255,23,68,0.55)',
+          borderWidth: 1,
+          borderDash: [6, 4],
+          pointRadius: 0,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      animation: { duration: 250 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: makeAxis(),
+        y: makeAxis({ min: 0, max: 1023 })
+      }
+    }
+  });
+
+  const accelChart = new Chart(document.getElementById('accelChart'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Accélérateur',
+        data: [],
+        borderColor: '#ff9100',
+        backgroundColor: 'rgba(255,145,0,0.07)',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.35
+      }]
+    },
+    options: {
+      responsive: true,
+      animation: { duration: 250 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: makeAxis(),
+        y: makeAxis({ min: 0, max: 100 })
+      }
+    }
+  });
+
+  /* ── Update cards ── */
+  function updateCards(d) {
+    if (!d) return;
+
+    // Gaz
+    document.getElementById('gazVal').textContent = d.gaz;
+    const gazPct = (d.gaz / 1023) * 100;
+    const gazBar = document.getElementById('gazBar');
+    gazBar.style.width = gazPct + '%';
+    gazBar.style.background = d.alarme ? 'var(--red)' : gazPct > 30 ? 'var(--orange)' : 'var(--blue)';
+    document.getElementById('cardGaz').style.setProperty('--blue', d.alarme ? 'var(--red)' : '#00b0ff');
+
+    // État air
+    const badge = document.getElementById('etatBadge');
+    if (d.etat_air === 'alerte_gaz') {
+      badge.className = 'badge badge-err';
+      badge.textContent = 'ALERTE GAZ';
+    } else {
+      badge.className = 'badge badge-ok';
+      badge.textContent = 'NORMAL';
+    }
+
+    // Alarme
+    const cardAlarm = document.getElementById('cardAlarm');
+    const alarmIcon = document.getElementById('alarmIcon');
+    if (d.alarme) {
+      cardAlarm.classList.add('alarm-active');
+      alarmIcon.className = 'alarm-on';
+      alarmIcon.textContent = '⚠ ALERTE';
+      document.getElementById('alarmTxt').textContent = 'ALARME ACTIVE';
+    } else {
+      cardAlarm.classList.remove('alarm-active');
+      alarmIcon.className = 'alarm-off';
+      alarmIcon.textContent = '✓ ÉTEINTE';
+      document.getElementById('alarmTxt').textContent = '';
+    }
+
+    // Accélérateur
+    document.getElementById('accelVal').textContent = d.accelerateur;
+    document.getElementById('accelBar').style.width = d.accelerateur + '%';
+
+    // Vitesse
+    document.getElementById('vitesseTag').textContent = VITESSE[d.vitesse] || d.vitesse;
+
+    // Distance
+    if (d.distance !== undefined && d.distance >= 0) {
+      document.getElementById('distVal').textContent = d.distance;
+      const proxPct = Math.max(0, Math.min(100, ((400 - d.distance) / 400) * 100));
+      const distBar = document.getElementById('distBar');
+      const distBadge = document.getElementById('distBadge');
+      if (d.distance > 200) {
+        distBar.style.background = 'var(--green)';
+        distBadge.className = 'badge badge-ok';
+        distBadge.textContent = 'DÉGAGÉ';
+      } else if (d.distance > 50) {
+        distBar.style.background = 'var(--orange)';
+        distBadge.className = 'badge badge-warn';
+        distBadge.textContent = 'APPROCHE';
+      } else {
+        distBar.style.background = 'var(--red)';
+        distBadge.className = 'badge badge-err';
+        distBadge.textContent = 'PROXIMITÉ';
+      }
+      distBar.style.width = proxPct + '%';
+    }
+
+    // Capteur Axes / Chute
+    const cardAxes   = document.getElementById('cardAxes');
+    const chuteBadge = document.getElementById('chuteBadge');
+    if (d.z_accel !== null && d.z_accel !== undefined) {
+      document.getElementById('zAccelVal').textContent = d.z_accel.toFixed(3);
+    }
+    if (d.chute) {
+      cardAxes.classList.add('alarm-active');
+      chuteBadge.className   = 'badge badge-err';
+      chuteBadge.textContent = 'CHUTE !';
+    } else {
+      cardAxes.classList.remove('alarm-active');
+      chuteBadge.className   = 'badge badge-ok';
+      chuteBadge.textContent = 'STABLE';
+    }
+
+    // Timestamp
+    document.getElementById('lastUpdate').textContent = fmtTime(d.timestamp);
+  }
+
+  /* ── Update charts ── */
+  function updateCharts(logs) {
+    if (!logs || !logs.length) return;
+    const labels  = logs.map(l => fmtTime(l.timestamp));
+    const gazData = logs.map(l => l.gaz);
+    const seuil   = logs.map(() => 150);
+    const acc     = logs.map(l => l.accelerateur);
+    gazChart.data.labels              = labels;
+    gazChart.data.datasets[0].data   = gazData;
+    gazChart.data.datasets[1].data   = seuil;
+    gazChart.update();
+
+    accelChart.data.labels            = labels;
+    accelChart.data.datasets[0].data  = acc;
+    accelChart.update();
+  }
+
+  /* ── Fetch loop ── */
+  async function refresh() {
+    try {
+      const [r1, r2] = await Promise.all([fetch('/api/latest'), fetch('/api/logs')]);
+      const latest = await r1.json();
+      const logs   = await r2.json();
+      updateCards(latest);
+      updateCharts(logs);
+      document.getElementById('connDot').className    = 'dot';
+      document.getElementById('connStatus').textContent = 'EN LIGNE';
+    } catch (_) {
+      document.getElementById('connDot').className    = 'dot offline';
+      document.getElementById('connStatus').textContent = 'HORS LIGNE';
+    }
+  }
+
+  refresh();
+  setInterval(refresh, 2000);
+
+  /* ── Bouton ATTERRISSAGE INTERDIT ── */
+  let _confirmPending = false;
+  let _confirmTimer   = null;
+
+  function resetBtn() {
+    _confirmPending = false;
+    if (_confirmTimer) { clearTimeout(_confirmTimer); _confirmTimer = null; }
+    const btn = document.getElementById('btnAtterrissage');
+    btn.disabled = false;
+    btn.className = 'btn-interdit';
+    document.getElementById('btnMain').textContent = 'ATTERRISSAGE INTERDIT';
+    document.getElementById('btnSub').textContent  = 'ZONE CONTAMINÉE · ALERTE CRITIQUE';
+  }
+
+  async function handleAtterrissage() {
+    const btn = document.getElementById('btnAtterrissage');
+    const fb  = document.getElementById('cmdFeedback');
+
+    if (!_confirmPending) {
+      // 1er clic : demande confirmation
+      _confirmPending = true;
+      btn.classList.add('confirming');
+      document.getElementById('btnMain').textContent = 'CONFIRMER L\'ENVOI ?';
+      document.getElementById('btnSub').textContent  = 'Cliquer à nouveau pour confirmer · annulation dans 3 s';
+      fb.style.color   = 'var(--yellow)';
+      fb.textContent   = 'EN ATTENTE DE CONFIRMATION…';
+
+      _confirmTimer = setTimeout(() => {
+        resetBtn();
+        fb.style.color = 'var(--dim)';
+        fb.textContent = 'Commande annulée.';
+        setTimeout(() => { fb.textContent = ''; }, 2000);
+      }, 3000);
+
+    } else {
+      // 2e clic : envoi
+      clearTimeout(_confirmTimer);
+      _confirmPending = false;
+      btn.classList.remove('confirming');
+      btn.disabled = true;
+      document.getElementById('btnMain').textContent = 'TRANSMISSION EN COURS…';
+      document.getElementById('btnSub').textContent  = 'Connexion au broker MQTT';
+      fb.style.color = 'var(--dim)';
+      fb.textContent = 'Publication sur isen/blackbox/commandes…';
+
+      try {
+        const resp   = await fetch('/api/commande/atterrissage', { method: 'POST' });
+        const result = await resp.json();
+        if (result.status === 'ok') {
+          btn.classList.add('sent');
+          document.getElementById('btnMain').textContent = 'COMMANDE TRANSMISE';
+          document.getElementById('btnSub').textContent  = 'Signal reçu par le Raspberry Pi';
+          fb.style.color = 'var(--green)';
+          fb.textContent = 'ATTERRISSAGE_INTERDIT · envoyé le ' + new Date().toLocaleTimeString('fr-FR');
+        } else {
+          throw new Error(result.message);
+        }
+      } catch (e) {
+        btn.classList.add('error-state');
+        document.getElementById('btnMain').textContent = 'ÉCHEC TRANSMISSION';
+        document.getElementById('btnSub').textContent  = e.message || 'Broker injoignable';
+        fb.style.color = 'var(--orange)';
+        fb.textContent = 'Erreur : ' + (e.message || 'réseau indisponible');
+      }
+
+      setTimeout(resetBtn, 4000);
+    }
+  }
+</script>
+</body>
+</html>
